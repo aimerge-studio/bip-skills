@@ -4,7 +4,7 @@ Turn your daily Claude Code sessions into social media posts and structured dev 
 
 Type `/bip` at the end of a work session. It auto-detects your project, writes a session log, and generates ready-to-copy posts for Twitter/X, Threads, and LinkedIn -- each in the language and style you configure.
 
-**No dependencies. No API keys. No build step.** Just a single markdown file that tells Claude Code what to do.
+**No dependencies. No build step.** Just a single markdown file that tells Claude Code what to do. Auto-posting is optional and requires a Typefully API key ($12.50/mo).
 
 ## Quick start (experienced users)
 
@@ -250,6 +250,10 @@ This generates posts about a specific topic without writing a log file.
 | `/bip posts` | Generate posts only, no log file |
 | `/bip log` | Write session log only, no posts |
 | `/bip posts "topic"` | Generate posts about a specific topic |
+| `/bip draft` | Save today's posts to Typefully as drafts for review and editing |
+| `/bip post` | Alias for `/bip draft` |
+| `/bip schedule 14:30` | Schedule today's posts for auto-publish at 2:30 PM via Typefully |
+| `/bip queue` | Show upcoming scheduled posts + content calendar |
 
 ### Modifiers
 
@@ -325,11 +329,101 @@ And writes to:
 
 ---
 
+## Auto-Posting with Typefully (optional)
+
+`/bip` can post directly to Twitter/X, Threads, and LinkedIn via [Typefully](https://typefully.com/?via=nikita). This is fully opt-in — the basic skill works without it.
+
+### Why Typefully?
+
+One API key, all three platforms. Scheduling built in. No need to manage separate OAuth flows for each social network. Costs $12.50/mo Creator plan.
+
+Direct platform APIs are all gated for solo builders:
+
+- Twitter/X API: $200/mo minimum
+- LinkedIn API: requires Partner Program approval
+- Threads API: requires Meta business approval
+
+Typefully is the pragmatic solution.
+
+### Setup (5 minutes)
+
+#### Step 1: Create a Typefully account
+
+Go to [typefully.com](https://typefully.com/?via=nikita) and sign up.
+
+Connect your profiles: click **Add Profile** for each platform — Twitter/X, Threads, LinkedIn.
+
+#### Step 2: Get your API key
+
+In Typefully: **Settings → API → Create API key**. Copy it.
+
+#### Step 3: Find your Social Set ID
+
+A Social Set is the group of connected profiles in your account. Find its ID:
+
+```bash
+curl -s "https://api.typefully.com/v2/social-sets" \
+  -H "Authorization: Bearer YOUR_API_KEY_HERE"
+```
+
+Look for the `"id"` field in the JSON response — that's your Social Set ID.
+
+#### Step 4: Create the credentials file
+
+```bash
+cat > ~/.bip-credentials << 'EOF'
+export TYPEFULLY_API_KEY=your_api_key_here
+export TYPEFULLY_SOCIAL_SET_ID=your_social_set_id_here
+EOF
+chmod 600 ~/.bip-credentials
+```
+
+This file lives outside any repo and is never committed (`.bip-credentials` is in `.gitignore`).
+
+#### Step 5: Test it
+
+Run `/bip` first to generate and save today's posts, then:
+
+```
+/bip draft
+```
+
+Check your Typefully dashboard — you should see three new drafts (one per platform) ready to review and edit before publishing.
+
+### Workflow
+
+1. End your coding session: `/bip` — writes the log and generates posts, saves everything to your vault
+2. Send to Typefully: `/bip draft` — creates drafts for all three platforms
+3. Open Typefully, review and tweak the copy if needed
+4. Publish immediately or schedule from Typefully's UI
+
+### How the content calendar works
+
+Every time you run `/bip draft`, `/bip post`, or `/bip schedule`, a row is appended to:
+
+```
+{vault}/Social Posts/calendar.md
+```
+
+Example:
+
+```text
+| Date       | Project         | Platforms                  | Status         | Time      |
+|------------|-----------------|----------------------------|----------------|-----------|
+| 2026-03-23 | Building Skills | Twitter, Threads, LinkedIn | queued (draft) | immediate |
+| 2026-03-24 | My SaaS App     | Twitter, Threads, LinkedIn | scheduled      | 14:30     |
+```
+
+Run `/bip queue` to see upcoming scheduled drafts from Typefully alongside this local log.
+
+---
+
 ## Roadmap
 
 - [ ] Image generation for posts (visual cards via AI image tools)
-- [ ] Direct posting to social media APIs
-- [ ] Post scheduling
+- [x] Direct posting to social media APIs (via Typefully)
+- [x] Post scheduling (via Typefully `publish_at`)
+- [x] Draft mode for review before publishing
 - [ ] Weekly digest mode (summarize a week of logs into one post)
 
 ---

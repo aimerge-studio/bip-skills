@@ -7,3 +7,4 @@
 *.p12
 *.pfx
 node_modules/
+.bip-credentials

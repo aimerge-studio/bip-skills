@@ -4,7 +4,7 @@ description: |
   Build in Public session logger. Writes a session summary to your vault
   and generates social media posts for multiple platforms.
   Use when the user says "bip", "log this session", "build in public", or "what did we do".
-argument-hint: "[posts|log|full] [optional: topic override]"
+argument-hint: "[posts|log|full|draft|post|schedule HH:MM|queue] [optional: topic override]"
 allowed-tools:
   - Bash
   - Read
@@ -55,6 +55,10 @@ For unknown slugs, use the slug as-is with first letter capitalized.
 - `/bip posts` -- posts only, no log file
 - `/bip log` -- log only, no posts
 - `/bip posts "topic"` -- posts about a specific topic (ignore session context, use the quoted topic)
+- `/bip draft` -- save today's posts to Typefully as drafts for review and editing → **skip to Step 7**
+- `/bip post` -- alias for `draft` (same behavior) → **skip to Step 7**
+- `/bip schedule HH:MM` -- schedule today's posts for auto-publish at HH:MM via Typefully → **skip to Step 7**
+- `/bip queue` -- show Typefully scheduled drafts + local calendar → **skip to Step 7**
 
 ## Step 2: Auto-detect context
 
@@ -282,6 +286,151 @@ After everything is done, summarize:
 - If posts were saved: "Posts saved to `<file path>`"
 - If posts were generated: the posts are already visible above
 - One-line summary of what was captured
+
+## Step 7: Auto-Posting via Typefully
+
+**Only run this step when mode is `draft`, `post`, `schedule HH:MM`, or `queue`. For all other modes, this step is skipped. When mode IS one of these, skip Steps 2--5b and jump directly here.**
+
+### Credential check
+
+```bash
+[ -f ~/.bip-credentials ] && echo "CREDS_OK" || echo "CREDS_MISSING"
+```
+
+If `CREDS_MISSING`, stop and print exactly this:
+
+```
+No Typefully credentials found. To enable auto-posting:
+
+1. Sign up at https://typefully.com/?via=nikita — connect Twitter/X, Threads, and LinkedIn
+2. Get your API key: Typefully → Settings → API → Create API key
+3. Find your Social Set ID:
+   curl -s "https://api.typefully.com/v2/social-sets" \
+     -H "Authorization: Bearer YOUR_API_KEY_HERE"
+   Copy the "id" value from the JSON response.
+4. Create the credentials file:
+   cat > ~/.bip-credentials << 'EOF'
+   export TYPEFULLY_API_KEY=your_api_key_here
+   export TYPEFULLY_SOCIAL_SET_ID=your_social_set_id_here
+   EOF
+   chmod 600 ~/.bip-credentials
+5. Run /bip post again
+```
+
+### `queue` mode
+
+```bash
+source ~/.bip-credentials
+_SOCIAL_SET_ID="$TYPEFULLY_SOCIAL_SET_ID"
+curl -s "https://api.typefully.com/v2/social-sets/${_SOCIAL_SET_ID}/drafts" \
+  -H "Authorization: Bearer $TYPEFULLY_API_KEY"
+```
+
+Parse the JSON response, filter for entries where `status` is `"scheduled"`, and display upcoming scheduled drafts in a readable table (date, content preview, platform). Also show the last 10 rows from `{Vault path}/Social Posts/calendar.md` if it exists. Stop here.
+
+### `draft` / `post` / `schedule HH:MM` mode
+
+**7a -- Source credentials and locate today's posts file**
+
+Read `{Vault path}` from the Configuration section above and use it as `_VAULT` below.
+
+```bash
+source ~/.bip-credentials
+_SOCIAL_SET_ID="$TYPEFULLY_SOCIAL_SET_ID"
+
+_TODAY=$(date +%Y-%m-%d)
+_VAULT="<vault path from config>"
+
+# Resolve project slug same as Step 2 (check pwd and git root)
+_GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+_GIT_SLUG=$(basename "$_GIT_ROOT")
+_PWD_SLUG=$(basename "$(pwd)")
+echo "PWD_SLUG: $_PWD_SLUG  GIT_SLUG: $_GIT_SLUG"
+
+# Check for today's posts file (try pwd slug first, then git slug)
+ls "$_VAULT/Social Posts/${_TODAY}-${_PWD_SLUG}.md" 2>/dev/null \
+  || ls "$_VAULT/Social Posts/${_TODAY}-${_GIT_SLUG}.md" 2>/dev/null \
+  || echo "POSTS_MISSING"
+```
+
+If `POSTS_MISSING`, stop and print: "No posts found for today. Run `/bip` first to generate and save posts, then run `/bip post`."
+
+**7b -- Extract platform content**
+
+Read the posts file. Extract the most recent session's content for each platform (last occurrence of `## Twitter`, `## Threads`, `## LinkedIn` sections before the next `---` separator or end of file). Store each as a variable:
+
+- `_TWITTER` -- Twitter post content
+- `_THREADS` -- Threads post content
+- `_LINKEDIN` -- LinkedIn post content
+
+**7c -- For `schedule HH:MM` mode: build target datetime**
+
+Parse `HH` and `MM` from the argument. Build ISO 8601 in local timezone (macOS):
+
+```bash
+_HOUR=14   # replace with parsed hour
+_MIN=30    # replace with parsed minute
+_SCHED=$(date -v${_HOUR}H -v${_MIN}M -v0S +"%Y-%m-%dT%H:%M:00%z")
+echo "Scheduling for: $_SCHED"
+```
+
+For `post` mode, `_SCHED` is empty (no `schedule-date` in payload).
+
+**7d -- POST each platform's draft to Typefully**
+
+Use `jq` to safely encode the JSON payload. The Typefully v2 API uses `platforms` object with per-platform content. Run three separate curl calls -- one per platform:
+
+```bash
+_URL="https://api.typefully.com/v2/social-sets/${_SOCIAL_SET_ID}/drafts"
+_AUTH="Authorization: Bearer $TYPEFULLY_API_KEY"
+
+# Twitter/X -- draft mode (no publish_at)
+_PAYLOAD=$(jq -n --arg text "$_TWITTER" \
+  '{"platforms": {"x": {"enabled": true, "posts": [{"text": $text}]}}}')
+# For schedule mode, add publish_at at top level:
+# _PAYLOAD=$(jq -n --arg text "$_TWITTER" --arg sched "$_SCHED" \
+#   '{"publish_at": $sched, "platforms": {"x": {"enabled": true, "posts": [{"text": $text}]}}}')
+curl -s -X POST "$_URL" -H "$_AUTH" -H "Content-Type: application/json" -d "$_PAYLOAD"
+
+# Threads
+_PAYLOAD=$(jq -n --arg text "$_THREADS" \
+  '{"platforms": {"threads": {"enabled": true, "posts": [{"text": $text}]}}}')
+curl -s -X POST "$_URL" -H "$_AUTH" -H "Content-Type: application/json" -d "$_PAYLOAD"
+
+# LinkedIn
+_PAYLOAD=$(jq -n --arg text "$_LINKEDIN" \
+  '{"platforms": {"linkedin": {"enabled": true, "posts": [{"text": $text}]}}}')
+curl -s -X POST "$_URL" -H "$_AUTH" -H "Content-Type: application/json" -d "$_PAYLOAD"
+```
+
+Capture each response and extract the draft ID from the JSON.
+
+**7e -- Update content calendar**
+
+```bash
+_CAL="$_VAULT/Social Posts/calendar.md"
+
+# Create calendar with header if it doesn't exist
+if [ ! -f "$_CAL" ]; then
+  printf '# Content Calendar\n\n| Date | Project | Platforms | Status | Time |\n|------|---------|-----------|--------|------|\n' > "$_CAL"
+fi
+
+# Append row
+_STATUS="queued"    # or "scheduled"
+_TIME="immediate"   # or "HH:MM" for schedule mode
+echo "| $_TODAY | <Display Name> | Twitter, Threads, LinkedIn | $_STATUS | $_TIME |" >> "$_CAL"
+```
+
+**7f -- Report**
+
+For each platform, show:
+
+- Platform name
+- First 60 chars of post content (preview)
+- Typefully draft ID from the API response
+- Status: "posted to queue" or "scheduled for HH:MM"
+
+---
 
 ## Adaptability
 
