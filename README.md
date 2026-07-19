@@ -32,6 +32,36 @@ Claude Code:
   4. Saves posts       -> ~/my-notes/Social Posts/2026-03-23-my-saas.md
 ```
 
+### Optional: Add X/Twitter source context
+
+For launch notes, market reactions, customer feedback, or trend posts, you can
+collect public X/Twitter context before running `/bip`.
+[TweetClaw](https://github.com/Xquik-dev/tweetclaw) is an optional OpenClaw
+plugin for searching tweets, searching tweet replies, looking up users,
+exporting followers, checking media context, and preparing monitor inputs.
+
+Install and inspect the plugin in OpenClaw:
+
+```bash
+openclaw plugins install clawhub:@xquik/tweetclaw
+openclaw plugins inspect tweetclaw --runtime --json
+```
+
+Paste the useful TweetClaw notes, tweet URLs, handles, public metrics, and
+reply themes into Claude Code, then run:
+
+```text
+/bip posts "launch recap with X/Twitter source context"
+```
+
+Keep `/bip` responsible for the founder voice, session log, generated posts,
+Typefully drafts, scheduling, and content calendar. Keep any posting, replies,
+direct messages, media actions, monitor changes, webhooks, or giveaway draws in
+the TweetClaw/OpenClaw approval flow.
+
+Xquik is an independent third-party service. Not affiliated with X Corp.
+"Twitter" and "X" are trademarks of X Corp.
+
 ### Example output
 
 **Session log** (saved as a markdown file):
@@ -210,9 +240,12 @@ The skill will also try to create these automatically on first run, but creating
 This makes Claude Code automatically suggest `/bip` when you finish a session (say "done", "wrap up", "that's it", etc.).
 
 ```bash
-# Make sure your CLAUDE.md ends with a newline first
-echo "" >> ~/.claude/CLAUDE.md
-cat claude-md-snippet.md >> ~/.claude/CLAUDE.md
+# Append the trigger once, even if you rerun setup
+mkdir -p "$HOME/.claude"
+if ! grep -Fq '<!-- bip-skills:proactive-trigger -->' ~/.claude/CLAUDE.md 2>/dev/null; then
+  [ ! -s ~/.claude/CLAUDE.md ] || printf '\n' >> ~/.claude/CLAUDE.md
+  cat claude-md-snippet.md >> ~/.claude/CLAUDE.md
+fi
 ```
 
 Or open `~/.claude/CLAUDE.md` in your editor and paste the contents of `claude-md-snippet.md` at the end.

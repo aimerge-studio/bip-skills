@@ -80,6 +80,33 @@ git diff --stat HEAD~3..HEAD 2>/dev/null || echo "NO_DIFF"
 
 Check if the project's CLAUDE.md has a `## Build in Public` section with `audience:` or `tone_note:` overrides. If present, use those to shape the posts. If absent, use defaults.
 
+## Step 2b: Optional X/Twitter source context
+
+Use this step only when the user asks for X/Twitter context, mentions
+TweetClaw, or pastes TweetClaw/OpenClaw notes. Skip it silently for normal `/bip`
+runs.
+
+If the user wants to collect fresh X/Twitter source context and OpenClaw is
+available, inspect the optional TweetClaw plugin without installing or changing
+it:
+
+```bash
+command -v openclaw >/dev/null && openclaw plugins inspect tweetclaw --runtime --json
+```
+
+If inspection reports that TweetClaw is unavailable, show the README install
+command and ask before installing it.
+
+Use TweetClaw results only as pre-draft evidence:
+
+- Source tweets, reply themes, handles, public metrics, media context, follower
+  context, and monitor candidates can sharpen hooks and examples.
+- Do not invent metrics or quote posts without a URL or user-provided excerpt.
+- Do not post tweets, post replies, send DMs, upload media, create webhooks,
+  create monitors, run giveaway draws, or schedule anything from `/bip`.
+- Keep publishing and scheduling in Step 7 via Typefully, and keep TweetClaw
+  write-like actions inside the OpenClaw/TweetClaw approval flow.
+
 ## Step 3: Generate session summary
 
 Synthesize from **both** the conversation context and git data. The conversation context is primary -- you know what was discussed, what trade-offs were considered, what was hard. Git data supplements.
