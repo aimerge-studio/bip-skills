@@ -1,3 +1,5 @@
+<!-- bip-skills:proactive-trigger -->
+
 ## Build in Public
 
 When any of these happen, suggest running `/bip`:
